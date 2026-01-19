@@ -11,9 +11,17 @@ import os
 from datetime import datetime
 import argparse
 
-THEMES_DIR = "themes"
-FONTS_DIR = "fonts"
-POSTERS_DIR = "posters"
+# Get the directory where this script lives (for reliable path resolution)
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+THEMES_DIR = os.path.join(SCRIPT_DIR, "themes")
+FONTS_DIR = os.path.join(SCRIPT_DIR, "fonts")
+POSTERS_DIR = os.path.join(SCRIPT_DIR, "posters")
+CACHE_DIR = os.path.join(SCRIPT_DIR, "cache")
+
+# Configure OSMnx caching - stores downloaded map data locally
+ox.settings.use_cache = True
+ox.settings.cache_folder = CACHE_DIR
 
 def load_fonts():
     """
@@ -36,7 +44,7 @@ def load_fonts():
 
 FONTS = load_fonts()
 
-def generate_output_filename(city, theme_name):
+def generate_output_filename(city, theme_name, extension='png'):
     """
     Generate unique output filename with city, theme, and datetime.
     """
@@ -45,7 +53,7 @@ def generate_output_filename(city, theme_name):
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     city_slug = city.lower().replace(' ', '_')
-    filename = f"{city_slug}_{theme_name}_{timestamp}.png"
+    filename = f"{city_slug}_{theme_name}_{timestamp}.{extension}"
     return os.path.join(POSTERS_DIR, filename)
 
 def get_available_themes():
@@ -213,19 +221,27 @@ def get_coordinates(city, country):
     else:
         raise ValueError(f"Could not find coordinates for {city}, {country}")
 
-def create_poster(city, country, point, dist, output_file, city_text=None, country_text=None):
+def create_poster(city, country, point, dist, output_base, aspect='portrait', output_format='png', city_text=None, country_text=None):
     print(f"\nGenerating map for {city}, {country}...")
     
-    # Progress bar for data fetching
+    # Set figure dimensions based on aspect ratio
+    if aspect == 'square':
+        figsize = (14, 14)
+    elif aspect == 'landscape':
+        figsize = (16, 12)
+    else:  # portrait (default)
+        figsize = (12, 16)
+
+    # Progress bar for data fetching (uses cache if available)
     with tqdm(total=3, desc="Fetching map data", unit="step", bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}') as pbar:
         # 1. Fetch Street Network
-        pbar.set_description("Downloading street network")
+        pbar.set_description("Loading street network")
         G = ox.graph_from_point(point, dist=dist, dist_type='bbox', network_type='all')
         pbar.update(1)
         time.sleep(0.5)  # Rate limit between requests
         
         # 2. Fetch Water Features
-        pbar.set_description("Downloading water features")
+        pbar.set_description("Loading water features")
         try:
             water = ox.features_from_point(point, tags={'natural': 'water', 'waterway': 'riverbank'}, dist=dist)
         except:
@@ -234,18 +250,18 @@ def create_poster(city, country, point, dist, output_file, city_text=None, count
         time.sleep(0.3)
         
         # 3. Fetch Parks
-        pbar.set_description("Downloading parks/green spaces")
+        pbar.set_description("Loading parks/green spaces")
         try:
             parks = ox.features_from_point(point, tags={'leisure': 'park', 'landuse': 'grass'}, dist=dist)
         except:
             parks = None
         pbar.update(1)
     
-    print("✓ All data downloaded successfully!")
+    print("✓ All data loaded successfully!")
     
     # 2. Setup Plot
     print("Rendering map...")
-    fig, ax = plt.subplots(figsize=(12, 16), facecolor=THEME['bg'])
+    fig, ax = plt.subplots(figsize=figsize, facecolor=THEME['bg'])
     ax.set_facecolor(THEME['bg'])
     ax.set_position([0, 0, 1, 1])
     
@@ -330,10 +346,23 @@ def create_poster(city, country, point, dist, output_file, city_text=None, count
     #         fontproperties=font_attr, zorder=11)
 
     # 5. Save
-    print(f"Saving to {output_file}...")
-    plt.savefig(output_file, dpi=300, facecolor=THEME['bg'])
+    saved_files = []
+    if output_format in ['png', 'both']:
+        output_png = output_base.replace('.png', '.png')  # ensure .png
+        print(f"Saving PNG to {output_png}...")
+        plt.savefig(output_png, dpi=300, facecolor=THEME['bg'])
+        saved_files.append(output_png)
+        print(f"✓ PNG saved as {output_png}")
+
+    if output_format in ['svg', 'both']:
+        output_svg = output_base.replace('.png', '.svg')
+        print(f"Saving SVG to {output_svg}...")
+        plt.savefig(output_svg, format='svg', facecolor=THEME['bg'])
+        saved_files.append(output_svg)
+        print(f"✓ SVG saved as {output_svg}")
+
     plt.close()
-    print(f"✓ Done! Poster saved as {output_file}")
+    print(f"✓ Done! Saved: {', '.join(saved_files)}")
 
 def print_examples():
     """Print usage examples."""
@@ -431,9 +460,14 @@ Examples:
     
     parser.add_argument('--city', '-c', type=str, help='City name')
     parser.add_argument('--country', '-C', type=str, help='Country name')
+    parser.add_argument('--latitude', '-la', type=float, help='Latitude of map center')
+    parser.add_argument('--longitude', '-lo', type=float, help='Longitude of map center')
     parser.add_argument('--theme', '-t', type=str, default='feature_based', help='Theme name (default: feature_based)')
     parser.add_argument('--distance', '-d', type=int, default=29000, help='Map radius in meters (default: 29000)')
+    parser.add_argument('--aspect', '-a', type=str, default='portrait', choices=['portrait', 'square', 'landscape'], help='Aspect ratio (default: portrait)')
+    parser.add_argument('--format', '-f', type=str, default='png', choices=['png', 'svg', 'both'], help='Output format (default: png)')
     parser.add_argument('--list-themes', action='store_true', help='List all available themes')
+    parser.add_argument('--clear-cache', action='store_true', help='Delete cached map data to free disk space')
     parser.add_argument('--display-city-text', type=str, help='Text to be displayed instead of city name')
     parser.add_argument('--display-country-text', type=str, help='Text to be displayed instead of country name')
     
@@ -443,15 +477,31 @@ Examples:
     if len(os.sys.argv) == 1:
         print_examples()
         os.sys.exit(0)
+
+    # Clear cache if requested
+    if args.clear_cache:
+        import shutil
+        if os.path.exists(CACHE_DIR):
+            total_size = sum(os.path.getsize(os.path.join(CACHE_DIR, f)) for f in os.listdir(CACHE_DIR) if os.path.isfile(os.path.join(CACHE_DIR, f)))
+            file_count = len([f for f in os.listdir(CACHE_DIR) if os.path.isfile(os.path.join(CACHE_DIR, f))])
+            shutil.rmtree(CACHE_DIR)
+            os.makedirs(CACHE_DIR)
+            print(f"✓ Cache cleared: {file_count} files, {total_size / (1024*1024):.1f} MB freed")
+        else:
+            print("Cache directory doesn't exist.")
+        os.sys.exit(0)
     
     # List themes if requested
     if args.list_themes:
         list_themes()
         os.sys.exit(0)
     
+    city_country_method = args.city and args.country
+    latitude_longitude_method = args.latitude and args.longitude
+
     # Validate required arguments
-    if not args.city or not args.country:
-        print("Error: --city and --country are required.\n")
+    if not city_country_method and not latitude_longitude_method:
+        print("Error: --city and --country or --latitude and --longitude are required.\n")
         print_examples()
         os.sys.exit(1)
     
@@ -468,12 +518,15 @@ Examples:
     
     # Load theme
     THEME = load_theme(args.theme)
+
+    args.city = args.city if args.city else ""
+    args.country = args.country if args.country else ""
     
     # Get coordinates and generate poster
     try:
-        coords = get_coordinates(args.city, args.country)
-        output_file = generate_output_filename(args.city, args.theme)
-        create_poster(args.city, args.country, coords, args.distance, output_file, args.display_city_text, args.display_country_text)
+        coords = (args.latitude, args.longitude) if latitude_longitude_method else get_coordinates(args.city, args.country)
+        output_file = generate_output_filename(args.city, args.theme, 'png')
+        create_poster(args.city, args.country, coords, args.distance, output_file, args.aspect, args.format, args.display_city_text, args.display_country_text)
         
         print("\n" + "=" * 50)
         print("✓ Poster generation complete!")
