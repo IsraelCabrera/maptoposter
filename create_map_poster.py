@@ -213,7 +213,7 @@ def get_coordinates(city, country):
     else:
         raise ValueError(f"Could not find coordinates for {city}, {country}")
 
-def create_poster(city, country, point, dist, output_file):
+def create_poster(city, country, point, dist, output_file, city_text=None, country_text=None):
     print(f"\nGenerating map for {city}, {country}...")
     
     # Progress bar for data fetching
@@ -250,11 +250,18 @@ def create_poster(city, country, point, dist, output_file):
     ax.set_position([0, 0, 1, 1])
     
     # 3. Plot Layers
-    # Layer 1: Polygons
+    # Layer 1: Polygons (filter to only plot polygon/multipolygon geometries, not points)
     if water is not None and not water.empty:
-        water.plot(ax=ax, facecolor=THEME['water'], edgecolor='none', zorder=1)
+        # Filter to only polygon/multipolygon geometries to avoid point features showing as dots
+        water_polys = water[water.geometry.type.isin(['Polygon', 'MultiPolygon'])]
+        if not water_polys.empty:
+            water_polys.plot(ax=ax, facecolor=THEME['water'], edgecolor='none', zorder=1)
+
     if parks is not None and not parks.empty:
-        parks.plot(ax=ax, facecolor=THEME['parks'], edgecolor='none', zorder=2)
+        # Filter to only polygon/multipolygon geometries to avoid point features showing as dots
+        parks_polys = parks[parks.geometry.type.isin(['Polygon', 'MultiPolygon'])]
+        if not parks_polys.empty:
+            parks_polys.plot(ax=ax, facecolor=THEME['parks'], edgecolor='none', zorder=2)
     
     # Layer 2: Roads with hierarchy coloring
     print("Applying road hierarchy colors...")
@@ -288,11 +295,17 @@ def create_poster(city, country, point, dist, output_file):
     
     spaced_city = "  ".join(list(city.upper()))
 
+    if city_text is None:
+        city_text = spaced_city
+
+    if country_text is None:
+        country_text = country.upper()
+
     # --- BOTTOM TEXT ---
-    ax.text(0.5, 0.14, spaced_city, transform=ax.transAxes,
+    ax.text(0.5, 0.14, city_text, transform=ax.transAxes,
             color=THEME['text'], ha='center', fontproperties=font_main, zorder=11)
     
-    ax.text(0.5, 0.10, country.upper(), transform=ax.transAxes,
+    ax.text(0.5, 0.10, country_text, transform=ax.transAxes,
             color=THEME['text'], ha='center', fontproperties=font_sub, zorder=11)
     
     lat, lon = point
@@ -307,14 +320,14 @@ def create_poster(city, country, point, dist, output_file):
             color=THEME['text'], linewidth=1, zorder=11)
 
     # --- ATTRIBUTION (bottom right) ---
-    if FONTS:
-        font_attr = FontProperties(fname=FONTS['light'], size=8)
-    else:
-        font_attr = FontProperties(family='monospace', size=8)
+    # if FONTS:
+    #     font_attr = FontProperties(fname=FONTS['light'], size=8)
+    # else:
+    #     font_attr = FontProperties(family='monospace', size=8)
     
-    ax.text(0.98, 0.02, "© OpenStreetMap contributors", transform=ax.transAxes,
-            color=THEME['text'], alpha=0.5, ha='right', va='bottom', 
-            fontproperties=font_attr, zorder=11)
+    # ax.text(0.98, 0.02, "© OpenStreetMap contributors", transform=ax.transAxes,
+    #         color=THEME['text'], alpha=0.5, ha='right', va='bottom', 
+    #         fontproperties=font_attr, zorder=11)
 
     # 5. Save
     print(f"Saving to {output_file}...")
@@ -421,6 +434,8 @@ Examples:
     parser.add_argument('--theme', '-t', type=str, default='feature_based', help='Theme name (default: feature_based)')
     parser.add_argument('--distance', '-d', type=int, default=29000, help='Map radius in meters (default: 29000)')
     parser.add_argument('--list-themes', action='store_true', help='List all available themes')
+    parser.add_argument('--display-city-text', type=str, help='Text to be displayed instead of city name')
+    parser.add_argument('--display-country-text', type=str, help='Text to be displayed instead of country name')
     
     args = parser.parse_args()
     
@@ -458,7 +473,7 @@ Examples:
     try:
         coords = get_coordinates(args.city, args.country)
         output_file = generate_output_filename(args.city, args.theme)
-        create_poster(args.city, args.country, coords, args.distance, output_file)
+        create_poster(args.city, args.country, coords, args.distance, output_file, args.display_city_text, args.display_country_text)
         
         print("\n" + "=" * 50)
         print("✓ Poster generation complete!")
