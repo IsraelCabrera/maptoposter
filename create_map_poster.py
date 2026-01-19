@@ -364,15 +364,14 @@ def create_poster(city, country, point, dist, output_base, aspect='portrait', ou
     plt.close()
     print(f"✓ Done! Saved: {', '.join(saved_files)}")
 
-def print_examples():
+def print_examples(parser):
     """Print usage examples."""
     print("""
 City Map Poster Generator
 =========================
-
-Usage:
-  python create_map_poster.py --city <city> --country <country> [options]
-
+""")
+    parser.print_help()
+    print("""
 Examples:
   # Iconic grid patterns
   python create_map_poster.py -c "New York" -C "USA" -t noir -d 12000           # Manhattan grid
@@ -403,13 +402,6 @@ Examples:
   
   # List themes
   python create_map_poster.py --list-themes
-
-Options:
-  --city, -c        City name (required)
-  --country, -C     Country name (required)
-  --theme, -t       Theme name (default: feature_based)
-  --distance, -d    Map radius in meters (default: 29000)
-  --list-themes     List all available themes
 
 Distance guide:
   4000-6000m   Small/dense cities (Venice, Amsterdam old center)
@@ -475,7 +467,7 @@ Examples:
     
     # If no arguments provided, show examples
     if len(os.sys.argv) == 1:
-        print_examples()
+        print_examples(parser)
         os.sys.exit(0)
 
     # Clear cache if requested
