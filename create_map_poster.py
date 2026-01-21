@@ -733,6 +733,7 @@ Examples:
     parser.add_argument('--clear-cache', action='store_true', help='Delete cached map data to free disk space')
     parser.add_argument('--display-city-text', type=str, help='Text to be displayed instead of city name')
     parser.add_argument('--display-country-text', type=str, help='Text to be displayed instead of country name')
+    parser.add_argument('--file-prefix', type=str, help='File prefix instead of city text')
     
     args = parser.parse_args()
     
@@ -777,13 +778,15 @@ Examples:
 
     args.city = args.city if args.city else ""
     args.country = args.country if args.country else ""
-    
+
+    prefix = args.file_prefix if args.file_prefix else args.city
+
     # Get coordinates and generate poster
     try:
         coords = (args.latitude, args.longitude) if latitude_longitude_method else get_coordinates(args.city, args.country)
         for theme_name in themes_to_generate:
             THEME = load_theme(theme_name)
-            output_file = generate_output_filename(args.city, theme_name, args.format)
+            output_file = generate_output_filename(prefix, theme_name, args.format)
             create_poster(args.city, args.country, coords, args.distance, output_file, args.aspect, args.format, country_label=args.display_country_text, city_text=args.display_city_text )
         
         print("\n" + "=" * 50)
